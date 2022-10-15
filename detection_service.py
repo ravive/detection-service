@@ -4,8 +4,16 @@ import redis
 from confluent_kafka import Consumer, Producer
 
 producer = Producer({"bootstrap.servers": "localhost:9092"})
-redis = redis.Redis(host='localhost', port=6379, db=0)
+redis = redis.Redis(host="localhost", port=6379, db=0)
 EXPIRED_IN_SECONDS = 60 * 30
+from prometheus_client import start_http_server, Summary, Counter
+
+is_phishing_counter = Counter(
+    "is_phishing_counter", "Description of counter", ["is_phishing"]
+)
+transaction_total_messages = Counter("total_transactions", "Description of counter")
+
+REQUEST_TIME = Summary("request_processing_seconds", "Time spent processing request")
 
 
 class Transaction:
@@ -20,6 +28,7 @@ FISHING_TOPIC = "fishing_topic"
 is_running = True
 
 
+@REQUEST_TIME.time()
 def is_phishing(msg):
     """
     :param msg:  transaction to check if fishing
@@ -28,6 +37,7 @@ def is_phishing(msg):
 
     """
     if not msg.get("is_phishing"):
+        is_phishing_counter.labels("false").inc()
         return False
 
     is_first_is_phishing_true = redis.setnx(str(msg.get("transaction_id")), 1)
@@ -35,11 +45,11 @@ def is_phishing(msg):
         redis.expire(msg.get("transaction_id"), EXPIRED_IN_SECONDS)
         return None
 
+    is_phishing_counter.labels("true").inc()
     return True
 
 
 def handle_message(msg):
-
     if msg is None:
         return None
 
@@ -47,6 +57,7 @@ def handle_message(msg):
         print("Consumer error: {}".format(msg.error()))
         return None
 
+    transaction_total_messages.inc()
     value = msg.value().decode("utf-8")
     print("Received message: {}".format(value))
 
@@ -83,4 +94,5 @@ def run_service(bootstrap_servers):
 
 
 if __name__ == "__main__":
+    start_http_server(8000)
     run_service("localhost:9092")

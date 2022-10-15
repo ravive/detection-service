@@ -1,0 +1,1 @@
+testcontainers[kafka,redis]==3.7.0
