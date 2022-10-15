@@ -1,0 +1,3 @@
+confluent-kafka>=1.9
+redis>=2.0.1
+testcontainers[kafka,redis]==3.7.0
